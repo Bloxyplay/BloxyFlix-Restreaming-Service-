@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Bloxy Flix's Stream Source</title>
+
+  <!-- Video.js core only (no HLS plugin) -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/video.js/8.10.0/video-js.min.css" rel="stylesheet"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/video.js/8.10.0/video.min.js"></script>
+
+  <!-- hls.js for HLS playback -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.7/hls.min.js"></script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+
+  <style>
+    :root {
+      --red:    #e8263a;
+      --gold:   #c9a84c;
+      --dark:   #0b0c0f;
+      --panel:  #13141a;
+      --border: #2a2b35;
+      --text:   #d8d9e0;
+      --muted:  #6b6d7e;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--dark);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.07'/%3E%3C/svg%3E");
+      background-size: 180px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* NOTICE */
+    .notice {
+      position: relative; z-index: 10;
+      background: linear-gradient(90deg,#6b1a22,#3a1010,#6b1a22);
+      border-bottom: 2px solid var(--red);
+      padding: 12px 24px;
+      text-align: center;
+      font-size: 0.82rem; font-weight: 500; letter-spacing: 0.02em;
+      color: #f5c6cb;
+      animation: noticePulse 4s ease-in-out infinite;
+    }
+    .notice strong { color: #fff; }
+    .notice a { color: var(--gold); text-decoration: none; border-bottom: 1px solid var(--gold); }
+    .notice a:hover { color: #fff; }
+    @keyframes noticePulse {
+      0%,100% { background: linear-gradient(90deg,#6b1a22,#3a1010,#6b1a22); }
+      50%      { background: linear-gradient(90deg,#3a1010,#6b1a22,#3a1010); }
+    }
+
+    /* HEADER */
+    header { position: relative; z-index: 5; padding: 48px 24px 0; text-align: center; }
+    .logo-mark {
+      display: inline-block; background: var(--red); color: #fff;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 0.75rem; letter-spacing: 0.2em;
+      padding: 4px 12px; margin-bottom: 14px;
+      clip-path: polygon(6px 0%,100% 0%,calc(100% - 6px) 100%,0% 100%);
+    }
+    h1 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(2.4rem,6vw,4.2rem);
+      letter-spacing: 0.05em; line-height: 1; color: #fff;
+      text-shadow: 0 0 40px rgba(232,38,58,.35);
+    }
+    h1 span { color: var(--red); }
+    .tagline {
+      margin: 18px auto 0; max-width: 700px;
+      font-size: 0.92rem; font-weight: 300;
+      color: var(--muted); line-height: 1.7;
+    }
+    .tagline em { color: var(--text); font-style: normal; font-weight: 500; }
+
+    /* DIVIDER */
+    .divider {
+      position: relative; z-index: 5;
+      display: flex; align-items: center; gap: 14px;
+      max-width: 900px; margin: 36px auto 0; padding: 0 24px;
+    }
+    .divider::before,.divider::after {
+      content:''; flex:1; height:1px;
+      background: linear-gradient(90deg,transparent,var(--border),transparent);
+    }
+    .divider-icon { color: var(--gold); }
+
+    /* MAIN */
+    .main-wrap {
+      position: relative; z-index: 5;
+      max-width: 900px; margin: 28px auto 0; padding: 0 24px 0;
+    }
+
+    /* TABS */
+    .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+    .tab-btn {
+      background: var(--panel); border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem; letter-spacing: 0.08em;
+      padding: 9px 18px; cursor: pointer; transition: all 0.2s;
+      clip-path: polygon(5px 0%,100% 0%,calc(100% - 5px) 100%,0% 100%);
+    }
+    .tab-btn:hover { border-color: var(--red); color: var(--text); }
+    .tab-btn.active { background: var(--red); border-color: var(--red); color: #fff; }
+
+    /* PANELS */
+    .stream-panels { margin-top: 20px; }
+    .stream-panel { display: none; }
+    .stream-panel.active { display: block; }
+
+    .player-wrap {
+      background: var(--panel); border: 1px solid var(--border);
+      border-top: 3px solid var(--red); padding: 24px;
+    }
+    .player-label {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.1rem; letter-spacing: 0.12em; color: var(--gold); margin-bottom: 16px;
+    }
+    .player-label span {
+      color: var(--muted); font-size: 0.7rem;
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 0.05em; margin-left: 10px;
+    }
+
+    /* Video.js theme overrides */
+    #kctv-video { width: 100%; }
+    .video-js .vjs-big-play-button {
+      border-color: var(--red) !important;
+      background: rgba(232,38,58,.35) !important;
+    }
+    .video-js:hover .vjs-big-play-button {
+      background: var(--red) !important;
+    }
+    .video-js .vjs-play-progress,
+    .video-js .vjs-volume-level {
+      background: var(--red) !important;
+    }
+    .video-js .vjs-control-bar {
+      background: rgba(11,12,15,.85);
+    }
+
+    /* Audio */
+    .audio-wrap {
+      background: #0d0e12; border: 1px solid var(--border);
+      padding: 32px 24px; text-align: center;
+    }
+    .audio-icon { font-size: 3rem; display: block; margin-bottom: 16px; filter: drop-shadow(0 0 12px var(--red)); }
+    .audio-wrap audio { width: 100%; max-width: 500px; accent-color: var(--red); }
+
+    .stream-url {
+      margin-top: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem; color: var(--muted); word-break: break-all;
+    }
+
+    /* BUTTONS */
+    .actions-wrap { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 20px; }
+    .action-btn {
+      flex: 1; min-width: 220px;
+      padding: 16px 24px; border: none; cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.88rem; font-weight: 600; letter-spacing: 0.04em;
+      transition: all 0.2s; position: relative; overflow: hidden;
+      text-align: left;
+    }
+    .action-btn::after {
+      content:''; position: absolute; inset: 0;
+      background: rgba(255,255,255,.08); opacity: 0; transition: opacity .2s;
+    }
+    .action-btn:hover::after { opacity: 1; }
+    .btn-source {
+      background: var(--red); color: #fff;
+      clip-path: polygon(8px 0%,100% 0%,calc(100% - 8px) 100%,0% 100%);
+    }
+    .btn-credit {
+      background: transparent; color: var(--gold);
+      border: 1px solid var(--gold);
+      clip-path: polygon(8px 0%,100% 0%,calc(100% - 8px) 100%,0% 100%);
+    }
+    .btn-credit:hover { background: rgba(201,168,76,.1); }
+    .btn-icon { margin-right: 8px; }
+    .btn-sub {
+      display: block; font-size: 0.68rem; font-weight: 400;
+      opacity: 0.7; margin-top: 3px;
+      font-family: 'JetBrains Mono', monospace; letter-spacing: 0.04em;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    /* TOAST */
+    .toast {
+      position: fixed; bottom: 28px; left: 50%;
+      transform: translateX(-50%) translateY(60px);
+      background: #1e1f28; border: 1px solid var(--gold);
+      color: var(--gold); padding: 10px 22px;
+      font-size: 0.82rem; font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 0.06em; z-index: 999;
+      transition: transform 0.3s cubic-bezier(.34,1.56,.64,1), opacity 0.3s;
+      opacity: 0; pointer-events: none;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+    /* MIDDLE NOTICE */
+    .mid-notice {
+      position: relative; z-index: 5;
+      max-width: 900px; margin: 32px auto 0; padding: 0 24px;
+    }
+    .mid-notice-inner {
+      background: linear-gradient(135deg,#0f1a2e,#0d1520,#101a0f);
+      border: 1px solid #2a4a6b;
+      border-left: 4px solid #3b82f6;
+      padding: 16px 22px;
+      display: flex; align-items: center; gap: 14px;
+    }
+    .mid-notice-icon { font-size: 1.4rem; flex-shrink: 0; }
+    .mid-notice-text { font-size: 0.88rem; font-weight: 500; color: #93c5fd; line-height: 1.5; }
+    .mid-notice-text strong { color: #fff; }
+
+    /* ABOUT */
+    .about-section {
+      position: relative; z-index: 5;
+      max-width: 900px; margin: 48px auto 0; padding: 0 24px;
+    }
+    .section-heading {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.6rem; letter-spacing: 0.1em; color: #fff;
+      display: flex; align-items: center; gap: 14px; margin-bottom: 20px;
+    }
+    .section-heading::after {
+      content:''; flex:1; height:1px;
+      background: linear-gradient(90deg,var(--border),transparent);
+    }
+    .section-heading span { color: var(--red); }
+    .about-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width:600px) { .about-grid { grid-template-columns: 1fr; } }
+    .about-card {
+      background: var(--panel); border: 1px solid var(--border);
+      border-top: 2px solid var(--gold); padding: 22px 24px;
+    }
+    .about-card-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 0.95rem; letter-spacing: 0.12em;
+      color: var(--gold); margin-bottom: 10px;
+    }
+    .about-card p { font-size: 0.86rem; color: var(--muted); line-height: 1.7; }
+    .about-card p a { color: var(--gold); text-decoration: none; border-bottom: 1px dotted var(--gold); }
+    .about-card p a:hover { color: #fff; }
+    .about-card p strong { color: var(--text); }
+    .about-full {
+      margin-top: 16px;
+      background: var(--panel); border: 1px solid var(--border);
+      border-top: 2px solid var(--red); padding: 22px 24px;
+    }
+    .about-full p { font-size: 0.86rem; color: var(--muted); line-height: 1.8; }
+    .about-full p strong { color: var(--text); }
+    .website-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      margin-top: 16px;
+      background: transparent; border: 1px solid var(--red);
+      color: var(--red); padding: 10px 22px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem; letter-spacing: 0.06em;
+      text-decoration: none; transition: all 0.2s;
+      clip-path: polygon(6px 0%,100% 0%,calc(100% - 6px) 100%,0% 100%);
+    }
+    .website-btn:hover { background: var(--red); color: #fff; }
+
+    /* FOOTER */
+    footer {
+      position: relative; z-index: 5;
+      text-align: center; padding: 48px 24px 0;
+      color: var(--muted); font-size: 0.75rem; letter-spacing: 0.04em;
+    }
+    footer a { color: var(--gold); text-decoration: none; }
+    footer a:hover { color: #fff; }
+    .footer-line { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 10px; }
+    .footer-dot { width: 4px; height: 4px; background: var(--red); border-radius: 50%; }
+
+    /* DISCLAIMER */
+    .disclaimer {
+      position: relative; z-index: 5;
+      background: #0d0e12; border-top: 1px solid var(--border);
+      margin-top: 36px; padding: 20px 24px;
+      text-align: center; font-size: 0.73rem;
+      color: var(--muted); line-height: 1.7; letter-spacing: 0.02em;
+    }
+    .disclaimer strong { color: #555; }
+  </style>
+</head>
+<body>
+
+  <!-- NOTICE -->
+  <div class="notice">
+    ⚠️ <strong>Important Notice:</strong> When restreaming, we kindly ask you to add <strong>our service</strong> and
+    <a href="https://www.intchoson.com" target="_blank">Intchoson</a> as credit —
+    without Intchoson, this would not be possible!
+  </div>
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo-mark">BLOXY FLIX</div>
+    <h1>Stream <span>Source</span></h1>
+    <p class="tagline">
+      Welcome to the stream source! Here you can restream
+      <em>Korean Central Television</em>, <em>Korean Central Broadcasting Station</em>,
+      <em>Voice of Korea</em> &amp; <em>Pyongyang FM</em> without any watermark
+      or automatic system blocking you. Enjoy, Restreamers!
+    </p>
+  </header>
+
+  <div class="divider"><span class="divider-icon">◆</span></div>
+
+  <!-- MIDDLE NOTICE -->
+  <div class="mid-notice">
+    <div class="mid-notice-inner">
+      <span class="mid-notice-icon">📡</span>
+      <div class="mid-notice-text">
+        <strong>Now Available for Restream!</strong>
+        This service is currently available for restream to <strong>YouTube</strong> or any other platforms — pick a stream below and go live!
+      </div>
+    </div>
+  </div>
+
+  <div class="main-wrap">
+
+    <!-- TABS -->
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('kctv',this)">📺 KCTV</button>
+      <button class="tab-btn" onclick="switchTab('kcbs',this)">📻 KCBS</button>
+      <button class="tab-btn" onclick="switchTab('vok',this)">🎙 Voice of Korea</button>
+      <button class="tab-btn" onclick="switchTab('pfm',this)">🎵 Pyongyang FM</button>
+    </div>
+
+    <div class="stream-panels">
+
+      <!-- KCTV -->
+      <div class="stream-panel active" id="panel-kctv">
+        <div class="player-wrap">
+          <div class="player-label">Korean Central Television <span>KCTV · LIVE</span></div>
+          <video
+            id="kctv-video"
+            class="video-js vjs-big-play-centered"
+            controls
+            playsinline
+            preload="auto"
+            style="width:100%;aspect-ratio:16/9;">
+          </video>
+        </div>
+      </div>
+
+      <!-- KCBS -->
+      <div class="stream-panel" id="panel-kcbs">
+        <div class="player-wrap">
+          <div class="player-label">Korean Central Broadcasting Station <span>KCBS · LIVE</span></div>
+          <div class="audio-wrap">
+            <span class="audio-icon">📻</span>
+            <audio id="kcbs-audio" controls></audio>
+          </div>
+        </div>
+      </div>
+
+      <!-- VOK -->
+      <div class="stream-panel" id="panel-vok">
+        <div class="player-wrap">
+          <div class="player-label">Voice of Korea <span>VOK · LIVE</span></div>
+          <div class="audio-wrap">
+            <span class="audio-icon">🎙</span>
+            <audio id="vok-audio" controls></audio>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pyongyang FM -->
+      <div class="stream-panel" id="panel-pfm">
+        <div class="player-wrap">
+          <div class="player-label">Pyongyang FM <span>PFM · LIVE</span></div>
+          <div class="audio-wrap">
+            <span class="audio-icon">🎵</span>
+            <audio controls>
+              <source src="https://listen7.myradio24.com/69366" type="audio/mpeg"/>
+            </audio>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /panels -->
+
+    <!-- BUTTONS -->
+    <div class="actions-wrap">
+      <button class="action-btn btn-source" onclick="copySource()">
+        <span class="btn-icon">⧉</span>Copy The Source
+        <span class="btn-sub" id="source-sub">bloxyflix-kctv.netlify.app</span>
+      </button>
+      <button class="action-btn btn-credit" onclick="copyCredit()">
+        <span class="btn-icon">★</span>Copy Stream Supporter Credit
+        <span class="btn-sub" id="credit-sub">Source: KCTV ~ via intchoson.com/kctv/</span>
+      </button>
+    </div>
+
+  </div><!-- /main-wrap -->
+
+
+  <!-- ABOUT -->
+  <div class="about-section">
+    <div class="section-heading">About <span>Bloxy Flix</span></div>
+    <div class="about-grid">
+      <div class="about-card">
+        <div class="about-card-title">Who We Are</div>
+        <p>
+          <strong>Bloxy Flix</strong> is a free streaming service dedicated to making
+          hard-to-access broadcasts available to everyone. We provide clean, watermark-free
+          restream sources so content creators and broadcasters can share rare live TV and
+          radio with their audiences around the world.
+        </p>
+      </div>
+      <div class="about-card">
+        <div class="about-card-title">What We Offer</div>
+        <p>
+          Through our Stream Source hub, we aggregate live feeds from
+          <strong>Korean Central Television (KCTV)</strong>,
+          <strong>KCBS Radio</strong>, <strong>Voice of Korea</strong>, and
+          <strong>Pyongyang FM</strong> — powered by our partners at
+          <a href="https://www.intchoson.com" target="_blank">Intchoson</a>.
+          No ads, no blocks, no watermarks.
+        </p>
+      </div>
+    </div>
+    <div class="about-full">
+      <p>
+        Our mission is simple: <strong>free access to public broadcasts.</strong>
+        Bloxy Flix was built for educators, journalists, researchers, and curious viewers
+        who want to watch or restream international television without barriers.
+        All streams on this page are provided for <strong>educational, informational,
+        and journalistic purposes</strong>. We are not affiliated with any of the
+        broadcasters featured on this page. Visit our main website to explore more
+        of what Bloxy Flix has to offer.
+      </p>
+      <a class="website-btn" href="https://bloxyflix.netlify.app" target="_blank">
+        ↗ Visit Bloxyflix.netlify.app
+      </a>
+    </div>
+  </div>
+
+  <footer>
+    <div class="footer-line">
+      <span class="footer-dot"></span>
+      <span>Powered by <a href="https://www.intchoson.com" target="_blank">Intchoson</a></span>
+      <span class="footer-dot"></span>
+      <a href="https://bloxyflix.netlify.app" target="_blank">Bloxy Flix</a>
+      <span class="footer-dot"></span>
+    </div>
+    <span>All streams sourced via intchoson.com — please credit accordingly.</span>
+  </footer>
+
+  <!-- DISCLAIMER -->
+  <div class="disclaimer">
+    <strong>⚖️ Educational &amp; Informational Use Only.</strong>
+    All streams provided on this page are intended solely for educational, informational, and journalistic purposes.
+    Bloxy Flix is not affiliated with, endorsed by, or in partnership with any of the broadcasters featured herein.
+    By using this service you agree to comply with the applicable laws and platform terms of service of any
+    platform you restream to. Bloxy Flix assumes no liability for how these streams are used.
+    Stream infrastructure courtesy of <a href="https://www.intchoson.com" target="_blank">Intchoson</a>.
+  </div>
+
+  <div class="toast" id="toast">Copied!</div>
+
+  <script>
+    // ── Stream data ──
+    const streams = {
+      kctv: {
+        source:     'bloxyflix-kctv.netlify.app',
+        creditText: 'Source: KCTV ~ via https://www.intchoson.com/kctv/',
+        creditSub:  'Source: KCTV ~ via intchoson.com/kctv/'
+      },
+      kcbs: {
+        source:     'bloxyflix-kctv.netlify.app',
+        creditText: 'Source: KCBS ~ via https://www.intchoson.com/kcbs/',
+        creditSub:  'Source: KCBS ~ via intchoson.com/kcbs/'
+      },
+      vok: {
+        source:     'bloxyflix-kctv.netlify.app',
+        creditText: 'Source: Voice of Korea ~ via https://www.intchoson.com/vok/',
+        creditSub:  'Source: VOK ~ via intchoson.com/vok/'
+      },
+      pfm: {
+        source:     'bloxyflix-kctv.netlify.app',
+        creditText: 'Source: Pyongyang FM ~ via https://listen7.myradio24.com/69366',
+        creditSub:  'Source: Pyongyang FM ~ via myradio24.com'
+      }
+    };
+
+    let currentTab = 'kctv';
+
+    // ── Attach hls.js to a plain audio element ──
+    function attachHls(mediaEl, url) {
+      if (typeof Hls === 'undefined') return;
+      if (Hls.isSupported()) {
+        var hls = new Hls();
+        hls.loadSource(url);
+        hls.attachMedia(mediaEl);
+      } else if (mediaEl.canPlayType('application/vnd.apple.mpegurl')) {
+        mediaEl.src = url;
+      }
+    }
+
+    // ── Init streams on page load ──
+    window.addEventListener('DOMContentLoaded', function () {
+      // KCTV — Video.js player (has built-in HLS via @videojs/http-streaming)
+      if (typeof videojs !== 'undefined') {
+        var player = videojs('kctv-video', {
+          fluid: true,
+          responsive: true,
+          controls: true,
+          preload: 'auto'
+        });
+        player.src({
+          src: 'https://tv.intchoson.com/kctv/index.m3u8',
+          type: 'application/x-mpegURL'
+        });
+      }
+
+      // Radio streams — hls.js on native audio elements
+      attachHls(document.getElementById('kcbs-audio'), 'https://radio.intchoson.com/kcbs/index.m3u8');
+      attachHls(document.getElementById('vok-audio'),  'https://radio.intchoson.com/vok/index.m3u8');
+    });
+
+    // ── Tab switching ──
+    function switchTab(id, btn) {
+      document.querySelectorAll('.stream-panel').forEach(function(p){ p.classList.remove('active'); });
+      document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
+      document.getElementById('panel-' + id).classList.add('active');
+      btn.classList.add('active');
+      currentTab = id;
+      var s = streams[id];
+      document.getElementById('source-sub').textContent = s.source;
+      document.getElementById('credit-sub').textContent = s.creditSub;
+    }
+
+    // ── Copy helpers ──
+    function copySource() {
+      navigator.clipboard.writeText(streams[currentTab].source)
+        .then(function(){ showToast('✓ Source link copied!'); })
+        .catch(function(){ fallbackCopy(streams[currentTab].source); });
+    }
+
+    function copyCredit() {
+      navigator.clipboard.writeText(streams[currentTab].creditText)
+        .then(function(){ showToast('✓ Credit text copied!'); })
+        .catch(function(){ fallbackCopy(streams[currentTab].creditText); });
+    }
+
+    function fallbackCopy(text) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      try { document.execCommand('copy'); showToast('✓ Copied!'); }
+      catch(e) { showToast('Copy failed — try manually.'); }
+      document.body.removeChild(ta);
+    }
+
+    function showToast(msg) {
+      var t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(function(){ t.classList.remove('show'); }, 2600);
+    }
+  </script>
+</body>
+</html>
